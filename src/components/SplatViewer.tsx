@@ -77,8 +77,9 @@ export function SplatViewer({ splatUrl, className, onClose }: SplatViewerProps) 
 
         viewerRef.current = viewer;
 
-        // Load the splat
-        await viewer.addSplatScene(splatUrl, {
+        // Load the splat via proxy to avoid CORS
+        const proxiedUrl = `/api/proxy?url=${encodeURIComponent(splatUrl)}`;
+        await viewer.addSplatScene(proxiedUrl, {
           progressiveLoad: true,
           onProgress: (progress: number) => {
             if (mountedRef.current) {
