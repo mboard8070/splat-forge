@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Splat Forge 🔮
 
-## Getting Started
+Artist-friendly 3D Gaussian Splat generator powered by [World Labs Marble API](https://worldlabs.ai).
 
-First, run the development server:
+Generate photorealistic 3D splats from product images for use in:
+- Unreal Engine
+- Unity
+- Blender
+- Web viewers
+- VR/AR experiences
+
+## Features
+
+- **Image-to-Splat** - Upload product photos, get 3D splats
+- **Text-to-Splat** - Describe your scene, AI generates it
+- **Draft/Professional modes** - Fast previews or production quality
+- **Export formats**:
+  - SPZ / PLY (Gaussian splats)
+  - Collision mesh (GLB)
+  - 360° Panorama (→ HDRI)
+  - High-quality mesh (GLB)
+
+## Quick Start
+
+### 1. Get API Key
+
+Sign up at [platform.worldlabs.ai](https://platform.worldlabs.ai) and get your API key.
+
+### 2. Configure
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
+# Edit .env with your WORLDLABS_API_KEY
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Run with Docker
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+docker compose build
+docker compose up -d
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open http://localhost:3002
 
-## Learn More
+### Alternative: Local Development
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm install
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open http://localhost:3000
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Credit Costs
 
-## Deploy on Vercel
+| Input Type | Draft (~30s) | Professional (~5min) |
+|-----------|-------------|---------------------|
+| Text | 230 | 1,580 |
+| Image (pano) | 150 | 1,500 |
+| Image | 230 | 1,580 |
+| Multi-image | 250 | 1,600 |
+| Video | 250 | 1,600 |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+$1 = 1,250 credits
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Unreal Engine Integration
+
+Recommended plugins for importing Gaussian splats:
+
+| Plugin | Price | UE Version |
+|--------|-------|------------|
+| [XVERSE](https://github.com/xverse-engine/xverse-ue-plugin) | Free | 5.1-5.5 |
+| [Volinga](https://volinga.ai) | Paid | 5.1-5.6 |
+| [Luma AI](https://lumalabs.ai/unreal) | Free | 5.1-5.3 |
+
+### Coordinate System Note
+
+World Labs uses OpenCV coordinates (+x left, +y down, +z forward).
+Most DCC software uses OpenGL coordinates.
+
+**To convert:** Scale Y and Z axes by -1 (keep X unchanged).
+
+## HDRI from Panorama
+
+The 360° panorama export (2560×1280 equirectangular PNG) can be converted to HDRI for lighting:
+
+1. Download the panorama
+2. Import into Blender/Photoshop
+3. Convert to .hdr/.exr format
+4. Use as environment map
+
+## Tech Stack
+
+- Next.js 15
+- Tailwind CSS v4
+- shadcn/ui
+- World Labs Marble API
+
+## License
+
+MIT

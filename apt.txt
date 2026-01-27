@@ -1,0 +1,3 @@
+# apt packages to install during build
+nodejs
+npm
