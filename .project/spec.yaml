@@ -78,6 +78,8 @@ environment:
                 - python3-dev
                 - python3-pip
                 - vim
+                - nodejs
+                - npm
             - name: pip
               binary_path: /usr/bin/pip
               installed_packages:
@@ -87,7 +89,23 @@ environment:
             target: ""
     compose_file_path: ""
 execution:
-    apps: []
+    apps:
+        - name: splat-forge
+          type: custom
+          class: webapp
+          start_command: cd /project && npm start -- -p 3002 -H 0.0.0.0
+          health_check_command: curl -s http://localhost:3002 > /dev/null
+          stop_command: ""
+          user_msg: ""
+          logfile_path: ""
+          timeout_seconds: 120
+          icon_url: ""
+          webapp_options:
+              autolaunch: false
+              port: "3002"
+              proxy:
+                  trim_prefix: false
+              url_command: echo http://localhost:3002
     resources:
         gpu:
             requested: 1
