@@ -98,9 +98,14 @@ export function SplatViewer({ splatUrl, className, onClose }: SplatViewerProps) 
           setIsLoading(false);
         }
       } catch (err) {
+        // Ignore "Scene disposed" errors - they happen during normal cleanup
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        if (errorMessage.includes('disposed')) {
+          return;
+        }
         console.error('Splat viewer error:', err);
         if (mountedRef.current) {
-          setError(err instanceof Error ? err.message : 'Failed to load splat');
+          setError(errorMessage || 'Failed to load splat');
           setIsLoading(false);
         }
       }
