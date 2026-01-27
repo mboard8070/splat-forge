@@ -166,7 +166,7 @@ export function SplatForge() {
       if (!res.ok) throw new Error(data.error);
 
       const newJob: GenerationJob = {
-        id: crypto.randomUUID(),
+        id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         operationId: data.operationId,
         name: name || `Product ${new Date().toLocaleTimeString()}`,
         status: 'pending',
