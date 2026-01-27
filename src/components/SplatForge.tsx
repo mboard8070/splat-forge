@@ -59,8 +59,13 @@ interface GenerationJob {
 }
 
 export function SplatForge() {
+  const [mounted, setMounted] = useState(false);
   const [inputType, setInputType] = useState<'image' | 'text'>('image');
   const [quality, setQuality] = useState<'draft' | 'professional'>('draft');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [prompt, setPrompt] = useState('');
   const [name, setName] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -476,7 +481,7 @@ export function SplatForge() {
                           <div>
                             <h4 className="font-medium text-white">{job.name}</h4>
                             <p className="text-xs text-slate-400">
-                              {job.model} • {new Date(job.createdAt).toLocaleTimeString()}
+                              {job.model} • {mounted ? new Date(job.createdAt).toLocaleTimeString() : ''}
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
