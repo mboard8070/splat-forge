@@ -1,9 +1,0 @@
-services:
-  splat-forge:
-    build: .
-    container_name: splat-forge
-    ports:
-      - "3002:3000"
-    environment:
-      - WORLDLABS_API_KEY=${WORLDLABS_API_KEY}
-    restart: unless-stopped
