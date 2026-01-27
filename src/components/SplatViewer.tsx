@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, Maximize2, Minimize2, RotateCcw, Move3D } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,34 +13,57 @@ interface SplatViewerProps {
 
 export function SplatViewer({ splatUrl, className, onClose }: SplatViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewerContainerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const mountedRef = useRef(true);
+
+  const cleanupViewer = useCallback(() => {
+    if (viewerRef.current) {
+      try {
+        viewerRef.current.dispose();
+      } catch (e) {
+        // Ignore dispose errors
+      }
+      viewerRef.current = null;
+    }
+    // Manually clear the viewer container
+    if (viewerContainerRef.current) {
+      viewerContainerRef.current.innerHTML = '';
+    }
+  }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+    
     if (!containerRef.current || !splatUrl) return;
 
-    let viewer: any = null;
+    // Create a separate container for the viewer
+    const viewerContainer = document.createElement('div');
+    viewerContainer.style.width = '100%';
+    viewerContainer.style.height = '100%';
+    containerRef.current.appendChild(viewerContainer);
+    viewerContainerRef.current = viewerContainer;
 
     const initViewer = async () => {
       try {
+        if (!mountedRef.current) return;
+        
         setIsLoading(true);
         setError(null);
 
         // Dynamically import to avoid SSR issues
         const GaussianSplats3D = await import('@mkkellogg/gaussian-splats-3d');
         
-        // Clear any existing viewer
-        if (viewerRef.current) {
-          viewerRef.current.dispose();
-        }
+        if (!mountedRef.current || !viewerContainerRef.current) return;
 
-        // Create viewer with dark theme
-        viewer = new GaussianSplats3D.Viewer({
-          rootElement: containerRef.current,
-          cameraUp: [0, -1, 0], // World Labs uses OpenCV coords (flip Y)
+        // Create viewer
+        const viewer = new GaussianSplats3D.Viewer({
+          rootElement: viewerContainerRef.current,
+          cameraUp: [0, -1, 0],
           initialCameraPosition: [0, 0, 5],
           initialCameraLookAt: [0, 0, 0],
           selfDrivenMode: true,
@@ -58,33 +81,52 @@ export function SplatViewer({ splatUrl, className, onClose }: SplatViewerProps) 
         await viewer.addSplatScene(splatUrl, {
           progressiveLoad: true,
           onProgress: (progress: number) => {
-            setLoadProgress(Math.round(progress * 100));
+            if (mountedRef.current) {
+              setLoadProgress(Math.round(progress * 100));
+            }
           },
         });
 
+        if (!mountedRef.current) {
+          cleanupViewer();
+          return;
+        }
+
         await viewer.start();
-        setIsLoading(false);
+        
+        if (mountedRef.current) {
+          setIsLoading(false);
+        }
       } catch (err) {
         console.error('Splat viewer error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load splat');
-        setIsLoading(false);
+        if (mountedRef.current) {
+          setError(err instanceof Error ? err.message : 'Failed to load splat');
+          setIsLoading(false);
+        }
       }
     };
 
     initViewer();
 
     return () => {
-      if (viewerRef.current) {
-        viewerRef.current.dispose();
-        viewerRef.current = null;
+      mountedRef.current = false;
+      cleanupViewer();
+      // Remove the viewer container from DOM
+      if (viewerContainerRef.current && containerRef.current) {
+        try {
+          containerRef.current.removeChild(viewerContainerRef.current);
+        } catch (e) {
+          // Ignore if already removed
+        }
+        viewerContainerRef.current = null;
       }
     };
-  }, [splatUrl]);
+  }, [splatUrl, cleanupViewer]);
 
   const handleReset = () => {
-    if (viewerRef.current) {
-      viewerRef.current.camera?.position.set(0, 0, 5);
-      viewerRef.current.camera?.lookAt(0, 0, 0);
+    if (viewerRef.current?.camera) {
+      viewerRef.current.camera.position.set(0, 0, 5);
+      viewerRef.current.camera.lookAt(0, 0, 0);
     }
   };
 
@@ -96,7 +138,6 @@ export function SplatViewer({ splatUrl, className, onClose }: SplatViewerProps) 
     } else {
       document.exitFullscreen?.();
     }
-    setIsFullscreen(!isFullscreen);
   };
 
   useEffect(() => {
