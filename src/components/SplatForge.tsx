@@ -2,12 +2,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { 
-  Upload, 
-  Sparkles, 
-  Download, 
-  Loader2, 
+import {
+  Upload,
+  Sparkles,
+  Download,
+  Loader2,
   Image as ImageIcon,
+  Images,
   Type,
   Zap,
   Crown,
@@ -21,6 +22,7 @@ import {
   RefreshCw,
   Trash2,
   Eye,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +32,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { CREDIT_COSTS } from '@/lib/worldlabs';
@@ -58,9 +61,23 @@ interface GenerationJob {
   createdAt: string;
 }
 
+interface MultiImageItem {
+  id: string;
+  preview: string;
+  base64: string;
+  azimuth: number;
+}
+
+const AZIMUTH_OPTIONS = [
+  { value: '0', label: 'Front (0°)' },
+  { value: '90', label: 'Right (90°)' },
+  { value: '180', label: 'Back (180°)' },
+  { value: '270', label: 'Left (270°)' },
+];
+
 export function SplatForge() {
   const [mounted, setMounted] = useState(false);
-  const [inputType, setInputType] = useState<'image' | 'text'>('image');
+  const [inputType, setInputType] = useState<'image' | 'multi-image' | 'text'>('image');
   const [quality, setQuality] = useState<'draft' | 'professional'>('draft');
 
   useEffect(() => {
@@ -78,8 +95,10 @@ export function SplatForge() {
   const [viewerTitle, setViewerTitle] = useState('');
   const [unrealExportOpen, setUnrealExportOpen] = useState(false);
   const [unrealExportJob, setUnrealExportJob] = useState<GenerationJob | null>(null);
+  const [multiImages, setMultiImages] = useState<MultiImageItem[]>([]);
+  const [seed, setSeed] = useState('');
 
-  // Dropzone setup
+  // Single-image dropzone
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (file) {
@@ -87,7 +106,6 @@ export function SplatForge() {
       reader.onload = () => {
         const result = reader.result as string;
         setImagePreview(result);
-        // Extract base64 data (remove data URL prefix)
         const base64 = result.split(',')[1];
         setImageBase64(base64);
       };
@@ -103,6 +121,48 @@ export function SplatForge() {
     maxFiles: 1,
     multiple: false,
   });
+
+  // Multi-image dropzone
+  const onDropMulti = useCallback((acceptedFiles: File[]) => {
+    const remaining = 4 - multiImages.length;
+    const filesToAdd = acceptedFiles.slice(0, remaining);
+
+    filesToAdd.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        setMultiImages(prev => {
+          if (prev.length >= 4) return prev;
+          return [...prev, {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            preview: result,
+            base64,
+            azimuth: 0,
+          }];
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+  }, [multiImages.length]);
+
+  const { getRootProps: getMultiRootProps, getInputProps: getMultiInputProps, isDragActive: isMultiDragActive } = useDropzone({
+    onDrop: onDropMulti,
+    accept: {
+      'image/*': ['.jpg', '.jpeg', '.png', '.webp'],
+    },
+    maxFiles: 4,
+    multiple: true,
+    disabled: multiImages.length >= 4,
+  });
+
+  const removeMultiImage = (id: string) => {
+    setMultiImages(prev => prev.filter(img => img.id !== id));
+  };
+
+  const updateMultiImageAzimuth = (id: string, azimuth: number) => {
+    setMultiImages(prev => prev.map(img => img.id === id ? { ...img, azimuth } : img));
+  };
 
   // Poll for job status
   useEffect(() => {
@@ -143,6 +203,10 @@ export function SplatForge() {
       toast.error('Please upload an image first');
       return;
     }
+    if (inputType === 'multi-image' && multiImages.length === 0) {
+      toast.error('Please upload at least one image');
+      return;
+    }
     if (inputType === 'text' && !prompt.trim()) {
       toast.error('Please enter a prompt');
       return;
@@ -156,9 +220,14 @@ export function SplatForge() {
         body: JSON.stringify({
           prompt: prompt || undefined,
           imageBase64: inputType === 'image' ? imageBase64 : undefined,
+          images: inputType === 'multi-image' ? multiImages.map(img => ({
+            base64: img.base64,
+            azimuth: img.azimuth,
+          })) : undefined,
           quality,
-          name: name || `Product ${new Date().toLocaleTimeString()}`,
+          name: name || `Environment ${new Date().toLocaleTimeString()}`,
           isPano,
+          seed: seed || undefined,
         }),
       });
 
@@ -168,7 +237,7 @@ export function SplatForge() {
       const newJob: GenerationJob = {
         id: crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         operationId: data.operationId,
-        name: name || `Product ${new Date().toLocaleTimeString()}`,
+        name: name || `Environment ${new Date().toLocaleTimeString()}`,
         status: 'pending',
         progress: 0,
         model: data.model,
@@ -181,8 +250,10 @@ export function SplatForge() {
       // Reset form
       setImagePreview(null);
       setImageBase64(null);
+      setMultiImages([]);
       setPrompt('');
       setName('');
+      setSeed('');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Generation failed');
     } finally {
@@ -198,9 +269,23 @@ export function SplatForge() {
     const model = quality === 'professional' ? 'Marble 0.1-plus' : 'Marble 0.1-mini';
     const costs = CREDIT_COSTS[model];
     if (inputType === 'text') return costs.text;
+    if (inputType === 'multi-image') return costs.multi_image;
     if (isPano) return costs.image_pano;
     return costs.image;
   };
+
+  const getProCreditCost = () => {
+    const costs = CREDIT_COSTS['Marble 0.1-plus'];
+    if (inputType === 'text') return costs.text;
+    if (inputType === 'multi-image') return costs.multi_image;
+    if (isPano) return costs.image_pano;
+    return costs.image;
+  };
+
+  const isGenerateDisabled = isGenerating
+    || (inputType === 'image' && !imageBase64)
+    || (inputType === 'multi-image' && multiImages.length === 0)
+    || (inputType === 'text' && !prompt.trim());
 
   // Prevent hydration mismatch by not rendering until mounted
   if (!mounted) {
@@ -221,8 +306,8 @@ export function SplatForge() {
               <Sparkles className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">Splat Forge</h1>
-              <p className="text-xs text-slate-400">3D Gaussian Splat Generator</p>
+              <h1 className="text-xl font-bold text-white">Spatia</h1>
+              <p className="text-xs text-slate-400">Intelligent Environment Generator</p>
             </div>
           </div>
           <Badge variant="outline" className="border-violet-500/50 text-violet-300">
@@ -239,19 +324,23 @@ export function SplatForge() {
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
                   <Package className="w-5 h-5 text-violet-400" />
-                  Create Product Splat
+                  Create Environment
                 </CardTitle>
                 <CardDescription>
-                  Generate photorealistic 3D splats from product images
+                  Generate photorealistic 3D environments from images or text
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Input Type Tabs */}
-                <Tabs value={inputType} onValueChange={(v) => setInputType(v as 'image' | 'text')}>
-                  <TabsList className="grid grid-cols-2 bg-slate-800">
+                <Tabs value={inputType} onValueChange={(v) => setInputType(v as 'image' | 'multi-image' | 'text')}>
+                  <TabsList className="grid grid-cols-3 bg-slate-800">
                     <TabsTrigger value="image" className="data-[state=active]:bg-violet-600">
                       <ImageIcon className="w-4 h-4 mr-2" />
                       Image
+                    </TabsTrigger>
+                    <TabsTrigger value="multi-image" className="data-[state=active]:bg-violet-600">
+                      <Images className="w-4 h-4 mr-2" />
+                      Multi-Image
                     </TabsTrigger>
                     <TabsTrigger value="text" className="data-[state=active]:bg-violet-600">
                       <Type className="w-4 h-4 mr-2" />
@@ -265,8 +354,8 @@ export function SplatForge() {
                       {...getRootProps()}
                       className={cn(
                         "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all",
-                        isDragActive 
-                          ? "border-violet-500 bg-violet-500/10" 
+                        isDragActive
+                          ? "border-violet-500 bg-violet-500/10"
                           : "border-slate-700 hover:border-violet-500/50 hover:bg-slate-800/50",
                         imagePreview && "p-4"
                       )}
@@ -274,9 +363,9 @@ export function SplatForge() {
                       <input {...getInputProps()} />
                       {imagePreview ? (
                         <div className="relative">
-                          <img 
-                            src={imagePreview} 
-                            alt="Preview" 
+                          <img
+                            src={imagePreview}
+                            alt="Preview"
                             className="max-h-64 mx-auto rounded-lg"
                           />
                           <Button
@@ -296,9 +385,9 @@ export function SplatForge() {
                         <div className="space-y-4">
                           <Upload className="w-12 h-12 mx-auto text-slate-500" />
                           <div>
-                            <p className="text-white font-medium">Drop your product image here</p>
+                            <p className="text-white font-medium">Drop your image here</p>
                             <p className="text-slate-400 text-sm mt-1">
-                              or click to browse • JPG, PNG, WebP
+                              or click to browse &bull; JPG, PNG, WebP
                             </p>
                           </div>
                         </div>
@@ -318,14 +407,81 @@ export function SplatForge() {
                     </div>
                   </TabsContent>
 
+                  <TabsContent value="multi-image" className="mt-4 space-y-4">
+                    {/* Multi-image dropzone */}
+                    <div
+                      {...getMultiRootProps()}
+                      className={cn(
+                        "border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all",
+                        isMultiDragActive
+                          ? "border-violet-500 bg-violet-500/10"
+                          : "border-slate-700 hover:border-violet-500/50 hover:bg-slate-800/50",
+                        multiImages.length >= 4 && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <input {...getMultiInputProps()} />
+                      <div className="space-y-2">
+                        <Upload className="w-10 h-10 mx-auto text-slate-500" />
+                        <p className="text-white font-medium">
+                          {multiImages.length >= 4
+                            ? 'Maximum 4 images reached'
+                            : 'Drop up to 4 images here'}
+                        </p>
+                        <p className="text-slate-400 text-sm">
+                          {multiImages.length}/4 images &bull; JPG, PNG, WebP
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Image thumbnails with azimuth */}
+                    {multiImages.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {multiImages.map((img) => (
+                          <div key={img.id} className="relative rounded-lg border border-slate-700 bg-slate-800/50 overflow-hidden">
+                            <img
+                              src={img.preview}
+                              alt="Multi-image preview"
+                              className="w-full h-24 object-cover"
+                            />
+                            <Button
+                              size="icon"
+                              variant="destructive"
+                              className="absolute top-1 right-1 h-6 w-6"
+                              onClick={() => removeMultiImage(img.id)}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                            <div className="p-2">
+                              <Select
+                                value={String(img.azimuth)}
+                                onValueChange={(v) => updateMultiImageAzimuth(img.id, Number(v))}
+                              >
+                                <SelectTrigger className="h-8 bg-slate-900 border-slate-600 text-xs text-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {AZIMUTH_OPTIONS.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+
                   <TabsContent value="text" className="mt-4">
                     <div className="space-y-2">
                       <Label htmlFor="prompt" className="text-slate-300">
-                        Describe your product scene
+                        Describe your environment
                       </Label>
                       <Input
                         id="prompt"
-                        placeholder="A sleek shampoo bottle on a marble bathroom counter with soft morning light..."
+                        placeholder="A cozy living room with warm afternoon light streaming through floor-to-ceiling windows..."
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
                         className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
@@ -341,7 +497,7 @@ export function SplatForge() {
                   </Label>
                   <Input
                     id="name"
-                    placeholder="Spring Collection - Body Wash"
+                    placeholder="Modern Loft Interior"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
@@ -349,20 +505,35 @@ export function SplatForge() {
                 </div>
 
                 {/* Optional Prompt for Images */}
-                {inputType === 'image' && (
+                {(inputType === 'image' || inputType === 'multi-image') && (
                   <div className="space-y-2">
                     <Label htmlFor="imagePrompt" className="text-slate-300">
                       Style Guidance <span className="text-slate-500">(optional)</span>
                     </Label>
                     <Input
                       id="imagePrompt"
-                      placeholder="Studio lighting, premium product photography..."
+                      placeholder="Warm ambient lighting, photorealistic environment..."
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
                       className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                     />
                   </div>
                 )}
+
+                {/* Seed */}
+                <div className="space-y-2">
+                  <Label htmlFor="seed" className="text-slate-300">
+                    Seed <span className="text-slate-500">(optional)</span>
+                  </Label>
+                  <Input
+                    id="seed"
+                    type="number"
+                    placeholder="Leave empty for random"
+                    value={seed}
+                    onChange={(e) => setSeed(e.target.value)}
+                    className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                  />
+                </div>
 
                 {/* Quality Toggle */}
                 <div className="space-y-3">
@@ -398,7 +569,7 @@ export function SplatForge() {
                         <span className="font-medium text-white">Professional</span>
                       </div>
                       <p className="text-xs text-slate-400">~5 minutes</p>
-                      <p className="text-xs text-violet-400 mt-1">~{quality === 'professional' ? getCreditCost() : CREDIT_COSTS['Marble 0.1-plus'][inputType === 'text' ? 'text' : isPano ? 'image_pano' : 'image']} credits</p>
+                      <p className="text-xs text-violet-400 mt-1">~{quality === 'professional' ? getCreditCost() : getProCreditCost()} credits</p>
                     </button>
                   </div>
                 </div>
@@ -408,7 +579,7 @@ export function SplatForge() {
                   size="lg"
                   className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
                   onClick={handleGenerate}
-                  disabled={isGenerating || (inputType === 'image' && !imageBase64) || (inputType === 'text' && !prompt.trim())}
+                  disabled={isGenerateDisabled}
                 >
                   {isGenerating ? (
                     <>
@@ -418,7 +589,7 @@ export function SplatForge() {
                   ) : (
                     <>
                       <Sparkles className="w-5 h-5 mr-2" />
-                      Generate Splat
+                      Generate Environment
                     </>
                   )}
                 </Button>
@@ -472,7 +643,7 @@ export function SplatForge() {
                   <div className="text-center py-12 text-slate-500">
                     <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>No generations yet</p>
-                    <p className="text-sm mt-1">Create your first product splat!</p>
+                    <p className="text-sm mt-1">Create your first environment!</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -534,8 +705,8 @@ export function SplatForge() {
                         {job.status === 'completed' && job.world && (
                           <div className="space-y-3 mt-3">
                             {job.world.assets?.thumbnail_url && (
-                              <img 
-                                src={job.world.assets.thumbnail_url} 
+                              <img
+                                src={job.world.assets.thumbnail_url}
                                 alt={job.name}
                                 className="w-full h-32 object-cover rounded-lg"
                               />
@@ -665,8 +836,8 @@ export function SplatForge() {
           </DialogHeader>
           <div className="flex-1 p-4 pt-2">
             {viewerUrl && (
-              <SplatViewer 
-                splatUrl={viewerUrl} 
+              <SplatViewer
+                splatUrl={viewerUrl}
                 className="w-full h-full min-h-[60vh]"
               />
             )}

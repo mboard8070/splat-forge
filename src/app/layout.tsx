@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Splat Forge - 3D Gaussian Splat Generator",
-  description: "Generate photorealistic 3D Gaussian splats from product images for Unreal Engine and visualization",
+  title: "Spatia - Intelligent Environment Generator",
+  description: "Generate photorealistic 3D environments from images for Unreal Engine and visualization",
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },

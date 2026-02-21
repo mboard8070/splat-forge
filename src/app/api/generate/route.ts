@@ -12,13 +12,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { 
-      prompt, 
-      imageUrl, 
+    const {
+      prompt,
+      imageUrl,
       imageBase64,
+      images,
       quality = 'draft',
       name,
       isPano = false,
+      seed,
     } = body;
 
     const client = new WorldLabsClient(apiKey);
@@ -26,20 +28,40 @@ export async function POST(request: NextRequest) {
 
     let generateRequest: GenerateRequest;
 
-    if (imageUrl || imageBase64) {
+    if (images && Array.isArray(images) && images.length > 0) {
+      // Multi-image generation
+      generateRequest = {
+        world_prompt: {
+          type: 'multi-image',
+          multi_image_prompt: images.map((img: { base64: string; azimuth: number }) => ({
+            azimuth: img.azimuth,
+            content: {
+              source: 'data_base64' as const,
+              data_base64: img.base64,
+            },
+          })),
+          text_prompt: prompt || undefined,
+        },
+        model,
+        display_name: name || `Spatia Environment - ${new Date().toISOString().split('T')[0]}`,
+        tags: ['environment', 'spatia'],
+        ...(seed != null && seed !== '' ? { seed: Number(seed) } : {}),
+      };
+    } else if (imageUrl || imageBase64) {
       // Image-based generation
       generateRequest = {
         world_prompt: {
           type: 'image',
-          image_prompt: imageUrl 
+          image_prompt: imageUrl
             ? { source: 'uri', uri: imageUrl }
             : { source: 'data_base64', data_base64: imageBase64 },
           text_prompt: prompt || undefined,
           is_pano: isPano,
         },
         model,
-        display_name: name || `Product Splat - ${new Date().toISOString().split('T')[0]}`,
-        tags: ['product', 'splat-forge'],
+        display_name: name || `Spatia Environment - ${new Date().toISOString().split('T')[0]}`,
+        tags: ['environment', 'spatia'],
+        ...(seed != null && seed !== '' ? { seed: Number(seed) } : {}),
       };
     } else if (prompt) {
       // Text-based generation
@@ -49,12 +71,13 @@ export async function POST(request: NextRequest) {
           text_prompt: prompt,
         },
         model,
-        display_name: name || `Product Splat - ${new Date().toISOString().split('T')[0]}`,
-        tags: ['product', 'splat-forge'],
+        display_name: name || `Spatia Environment - ${new Date().toISOString().split('T')[0]}`,
+        tags: ['environment', 'spatia'],
+        ...(seed != null && seed !== '' ? { seed: Number(seed) } : {}),
       };
     } else {
       return NextResponse.json(
-        { error: 'Either prompt or image is required' },
+        { error: 'Either prompt, image, or multi-image input is required' },
         { status: 400 }
       );
     }
